@@ -1,1 +1,46 @@
-
+{
+  "users": [
+    {
+      "id": "admin1",
+      "email": "admin@presethub.com",
+      "password": "$2a$10$Q.l55mPjzw1fmXNy4DeqQu7nvvfoKmsPU9gGKNLjuHxvARtmZdzr",
+      "name": "Admin",
+      "username": "admin",
+      "role": "admin",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "verified": true,
+      "bio": "Platform administrator",
+      "avatar": "",
+      "socialLinks": {
+        "instagram": "",
+        "youtube": "",
+        "twitter": "",
+        "website": ""
+      },
+      "followers": [],
+      "following": [],
+      "wishlist": []
+    }
+  ],
+  "presets": [
+    {
+      "id": "p1",
+      "name": "गोल्डन हाउर",
+      "description": "सुनहरी रोशनी और गर्म टोन",
+      "category": "सनसेट",
+      "tags": ["सनसेट", "गोल्डन"],
+      "price": 0,
+      "author": "राहुल फोटोग्राफी",
+      "authorId": "admin1",
+      "createdAt": "2026-01-15T10:00:00.000Z",
+      "downloads": 1200,
+      "avgRating": 4.8,
+      "reviews": [],
+      "fileUrl": "/uploads/golden.xmp",
+      "previewImage": "",
+      "status": "approved"
+    }
+  ],
+  "downloads": [],
+  "orders": []
+}
