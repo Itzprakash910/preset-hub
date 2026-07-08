@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel – PresetHub</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        .admin-container { max-width: 1200px; margin: 40px auto; padding: 0 20px; }
+        .admin-card { background: #fff; border-radius: 16px; padding: 24px; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .admin-card h2 { margin-top: 0; display: flex; align-items: center; gap: 8px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 16px; margin-top: 12px; }
+        .stat-item { background: #f8f6f2; padding: 16px; border-radius: 12px; text-align: center; }
+        .stat-item .num { font-size: 2rem; font-weight: 700; color: #1e1e1e; }
+        .stat-item .label { color: #6b6b6b; }
+        .user-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        .user-table th, .user-table td { border: 1px solid #eee; padding: 8px 12px; text-align: left; }
+        .user-table th { background: #f2efea; }
+        .preset-list { display: flex; flex-direction: column; gap: 8px; }
+        .preset-item { display: flex; justify-content: space-between; align-items: center; background: #faf8f5; padding: 12px; border-radius: 8px; flex-wrap: wrap; gap: 8px; }
+        .preset-item .actions button { margin-left: 8px; }
+        .btn-sm { padding: 4px 12px; font-size: 0.75rem; }
+        .status-badge { padding: 2px 12px; border-radius: 20px; font-size: 0.7rem; font-weight: 600; }
+        .status-approved { background: #d4edda; color: #155724; }
+        .status-rejected { background: #f8d7da; color: #721c24; }
+        .status-pending { background: #fff3cd; color: #856404; }
+        #message { margin-top: 12px; padding: 12px; border-radius: 8px; display: none; }
+        #message.success { display: block; background: #d4edda; color: #155724; }
+        #message.error { display: block; background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <div class="admin-container">
+        <h1><i class="fas fa-crown"></i> Admin Dashboard</h1>
+        <div id="message"></div>
+
+        <div class="admin-card">
+            <h2><i class="fas fa-chart-simple"></i> Platform Analytics</h2>
+            <div class="stats-grid" id="analytics"></div>
+        </div>
+
+        <div class="admin-card">
+            <h2><i class="fas fa-users"></i> All Users</h2>
+            <div id="usersList"></div>
+        </div>
+
+        <div class="admin-card">
+            <h2><i class="fas fa-cubes"></i> All Presets</h2>
+            <div id="presetsList"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = window.location.origin + '/api';
+        const token = localStorage.getItem('token');
+
+        if (!token) {
+            alert('कृपया पहले लॉग इन करें।');
+            window.location.href = '/';
+        }
+
+        async function apiFetch(endpoint, options = {}) {
+            const res = await fetch(`${API_URL}${endpoint}`, {
+                ...options,
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                    ...(options.headers || {})
+                }
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ error: 'Request failed' }));
+                throw new Error(err.error || 'API error');
+            }
+            return res.json();
+        }
+
+        function showMessage(msg, type = 'success') {
+            const el = document.getElementById('message');
+            el.textContent = msg;
+            el.className = type;
+        }
+
+        async function loadAnalytics() {
+            try {
+                const data = await apiFetch('/admin/analytics');
+                const grid = document.getElementById('analytics');
+                grid.innerHTML = `
+                    <div class="stat-item"><div class="num">${data.totalUsers}</div><div class="label">कुल उपयोगकर्ता</div></div>
+                    <div class="stat-item"><div class="num">${data.totalPresets}</div><div class="label">कुल प्रीसेट</div></div>
+                    <div class="stat-item"><div class="num">${data.totalDownloads}</div><div class="label">कुल डाउनलोड</div></div>
+                    <div class="stat-item"><div class="num">₹${data.totalRevenue}</div><div class="label">कुल राजस्व</div></div>
+                `;
+            } catch (err) {
+                showMessage('Analytics लोड नहीं हुए: ' + err.message, 'error');
+            }
+        }
+
+        async function loadUsers() {
+            try {
+                const users = await apiFetch('/admin/users');
+                const container = document.getElementById('usersList');
+                if (!users.length) {
+                    container.innerHTML = '<p>कोई उपयोगकर्ता नहीं।</p>';
+                    return;
+                }
+                let html = `<table class="user-table">
+                    <thead><tr><th>नाम</th><th>ईमेल</th><th>भूमिका</th><th>सत्यापित</th></tr></thead><tbody>`;
+                users.forEach(u => {
+                    html += `<tr>
+                        <td>${u.name}</td>
+                        <td>${u.email}</td>
+                        <td>${u.role}</td>
+                        <td>${u.verified ? '✅' : '❌'}</td>
+                    </tr>`;
+                });
+                html += `</tbody></table>`;
+                container.innerHTML = html;
+            } catch (err) {
+                showMessage('Users लोड नहीं हुए: ' + err.message, 'error');
+            }
+        }
+
+        async function loadPresets() {
+            try {
+                const presets = await apiFetch('/presets');
+                const container = document.getElementById('presetsList');
+                if (!presets.length) {
+                    container.innerHTML = '<p>कोई प्रीसेट नहीं।</p>';
+                    return;
+                }
+                let html = `<div class="preset-list">`;
+                presets.forEach(p => {
+                    const statusClass = `status-${p.status || 'pending'}`;
+                    html += `
+                        <div class="preset-item">
+                            <div>
+                                <strong>${p.name}</strong> – ${p.author} (${p.category})
+                                <span class="status-badge ${statusClass}">${p.status || 'pending'}</span>
+                            </div>
+                            <div class="actions">
+                                <button class="btn btn-sm btn-primary" onclick="updateStatus('${p.id}','approved')">✅ Approve</button>
+                                <button class="btn btn-sm btn-danger" onclick="updateStatus('${p.id}','rejected')">❌ Reject</button>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += `</div>`;
+                container.innerHTML = html;
+            } catch (err) {
+                showMessage('Presets लोड नहीं हुए: ' + err.message, 'error');
+            }
+        }
+
+        window.updateStatus = async function(id, status) {
+            try {
+                await apiFetch(`/admin/presets/${id}/status`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ status })
+                });
+                showMessage(`प्रीसेट ${status} कर दिया गया।`, 'success');
+                loadPresets();
+            } catch (err) {
+                showMessage('Status update विफल: ' + err.message, 'error');
+            }
+        };
+
+        window.onload = function() {
+            loadAnalytics();
+            loadUsers();
+            loadPresets();
+        };
+    </script>
+</body>
+</html>
