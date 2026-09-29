@@ -1,34 +1,75 @@
-# PresetHub – Lightroom Preset Marketplace
+# PresetHub
 
-Node.js + Express + JSON file DB, vanilla JS frontend, PWA.
+PresetHub is a mobile-first Lightroom preset marketplace with search, SEO-friendly preset pages, creator profiles, follow, wishlist, reviews, downloads, Razorpay payments, admin moderation and PWA installation.
 
-## Setup
-```bash
-cd backend
-npm install
-cp .env.example .env
-# put a strong secret in .env:
-node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
-# add ADMIN_EMAIL / ADMIN_PASSWORD (12+ chars) to .env, then:
-npm run create-admin      # afterwards delete ADMIN_PASSWORD from .env
-npm run dev               # http://localhost:4000
+## Production structure
+
+- `frontend/` — website/PWA
+- `backend/` — Express API
+- `uploads/` — runtime user uploads (ignored by Git)
+- `db.seed.json` — safe demo seed data; runtime `db.json` is created automatically and ignored by Git
+- `render.yaml` — Render deployment
+- `.env.example` — environment template
+
+## Render
+
+Recommended settings:
+
+```text
+Root Directory: backend
+Build Command: npm ci --omit=dev
+Pre-Deploy Command: (empty)
+Start Command: npm start
+Auto-Deploy: On Commit
 ```
 
-## Deploy
-See **DEPLOY.md** (GitHub → Railway, Volume at `/data`, env variables).
+Add the variables from `backend/.env.example` in Render Environment Variables.
 
-## Security model
-- Preset files are stored in `DATA_DIR/private_uploads/` (default `backend/data/`) and only delivered by `POST /api/presets/:id/download` (login + purchase check).
-- Only `DATA_DIR/previews/` (images) is public.
-- New uploads are `pending` until an admin approves them.
-- Helmet CSP, strict CORS allow-list, rate limits (login/signup/payments), 50kb body limit.
-- Prices are always read from the server DB; Razorpay signature checked with timing-safe compare.
+Required in production:
+- `JWT_SECRET` — random secret, 64+ characters
+- `ADMIN_EMAIL`
+- `ADMIN_PASSWORD` — strong password, 12+ characters
 
-## Production checklist
-1. `NODE_ENV=production`, serve over HTTPS, `TRUST_PROXY=1` behind a proxy.
-2. Rotate any key that was ever committed/shared (JWT secret, Razorpay).
-3. Back up `backend/db/db.json` (or move to a real DB like Postgres/Mongo before real traffic).
-4. Run `npm audit`.
+Optional:
+- Razorpay keys
+- Telegram bot token/admin chat ID
+- `API_BASE`
 
-## License
-MIT
+## SEO
+
+Approved presets receive crawlable canonical pages:
+
+`/preset/<id>/<slug>/`
+
+The server generates:
+- unique title and description
+- canonical URL
+- Open Graph metadata
+- Product structured data
+- creator profile links
+- dynamic `/sitemap.xml`
+- `/robots.txt`
+- internal search suggestions
+- Google site-search fallback for unmatched queries
+
+Google indexing and ranking are not guaranteed. Submit the sitemap in Google Search Console and use URL Inspection for important pages.
+
+## AdSense
+
+Replace the `ads.txt` publisher ID only with the publisher ID shown in your own AdSense account. Do not publish someone else's seller ID.
+
+Keep `ads.txt` available at:
+
+`https://your-domain.example/ads.txt`
+
+AdSense approval depends on Google's current policies, original/valuable content and site quality; code cannot guarantee approval or a top Search position.
+
+## Security
+
+Never commit `.env`, real credentials, database backups, private uploads or bot tokens.
+
+Admin creation is environment-driven; there is no default admin password in source code.
+
+## PWA
+
+PresetHub is installable as a PWA. Open `/download-app.html` for install instructions. A real signed native APK is not included as a fake placeholder; build/sign an Android wrapper separately if a native APK is required.
