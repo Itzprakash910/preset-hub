@@ -12,15 +12,19 @@ const userRoutes = require('./routes/users');
 const reviewRoutes = require('./routes/reviews');
 const paymentRoutes = require('./routes/payments');
 const adminRoutes = require('./routes/admin');
+const { PREVIEW_DIR } = require('./utils/paths');
+const { ensureAdmin } = require('./utils/bootstrap');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 const isProd = process.env.NODE_ENV === 'production';
 
-if (process.env.TRUST_PROXY === '1') app.set('trust proxy', 1);
+if (process.env.TRUST_PROXY === '1' || process.env.RAILWAY_ENVIRONMENT) app.set('trust proxy', 1);  // Railway sits behind a proxy
 app.disable('x-powered-by');
 
 // ---- Security headers (CSP allows only own scripts + the CDNs/fonts/Razorpay we use)
+app.get('/health', (req, res) => res.json({ ok: true }));   // Railway healthcheck
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -65,7 +69,7 @@ app.use('/api/payments', limiter(15, 30, 'Too many payment requests'));
 // ---- Static: frontend (no dotfiles) + PUBLIC preview images only.
 // Preset files live in private_uploads/ and are never served statically.
 app.use(express.static(path.join(__dirname, '../frontend'), { dotfiles: 'deny' }));
-app.use('/uploads/previews', express.static(path.join(__dirname, 'uploads', 'previews'), {
+app.use('/uploads/previews', express.static(PREVIEW_DIR, {
   dotfiles: 'deny', index: false,
   setHeaders: res => res.setHeader('X-Content-Type-Options', 'nosniff')
 }));
@@ -93,4 +97,6 @@ app.use((err, req, res, next) => {
   res.status(err.status && err.status < 500 ? err.status : 500).json({ error: err.expose ? err.message : 'Server error' });
 });
 
-app.listen(PORT, () => console.log(`PresetHub running on port ${PORT}`));
+ensureAdmin()
+  .catch(err => console.error('Admin bootstrap failed:', err.message))
+  .finally(() => app.listen(PORT, '0.0.0.0', () => console.log(`PresetHub running on port ${PORT}`)));
