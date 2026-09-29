@@ -1,142 +1,144 @@
 const express = require('express');
 const auth = require('../middleware/auth');
 const { getDB } = require('../db/db');
-const { v4: uuidv4 } = require('uuid');
+const { str, safeUrl, publicPreset } = require('../utils/helpers');
 
 const router = express.Router();
+const SOCIAL_KEYS = ['instagram', 'youtube', 'twitter', 'website'];
 
-// Get own profile
+// Private view (own profile)
+const own = ({ password, ...u }) => u;
+// Public view: no email, role, wishlist, follower lists
+const publicUser = u => ({
+  id: u.id, name: u.name, username: u.username || '', bio: u.bio || '',
+  avatar: u.avatar || '', verified: !!u.verified, socialLinks: u.socialLinks || {},
+  createdAt: u.createdAt
+});
+
 router.get('/me', auth, async (req, res) => {
   const db = await getDB();
   const user = db.data.users.find(u => u.id === req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
-  const { password, ...safeUser } = user;
-  res.json(safeUser);
+  res.json(own(user));
 });
 
-// Update profile (name, username, bio, avatar, socialLinks)
 router.put('/me', auth, async (req, res) => {
-  const { name, username, bio, avatar, socialLinks } = req.body;
   const db = await getDB();
   const user = db.data.users.find(u => u.id === req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
+  const b = req.body || {};
 
-  // Check username uniqueness (if changed)
-  if (username && username !== user.username) {
-    const existing = db.data.users.find(u => u.username === username && u.id !== req.user.id);
-    if (existing) return res.status(409).json({ error: 'Username already taken' });
+  if (b.username !== undefined) {
+    const username = str(b.username, 30).toLowerCase();
+    if (!/^[a-z0-9_]{3,30}$/.test(username)) {
+      return res.status(400).json({ error: 'Username: 3–30 chars, a-z, 0-9, _ only' });
+    }
+    if (db.data.users.some(u => u.username === username && u.id !== user.id)) {
+      return res.status(409).json({ error: 'Username already taken' });
+    }
+    user.username = username;
   }
-
-  if (name) user.name = name;
-  if (username) user.username = username;
-  if (bio) user.bio = bio;
-  if (avatar) user.avatar = avatar;
-  if (socialLinks) user.socialLinks = { ...user.socialLinks, ...socialLinks };
+  if (b.name !== undefined) {
+    const name = str(b.name, 60);
+    if (name.length < 2) return res.status(400).json({ error: 'Name too short' });
+    user.name = name;
+  }
+  if (b.bio !== undefined) user.bio = str(b.bio, 300);          // can now be cleared
+  if (b.avatar !== undefined) {
+    const url = safeUrl(b.avatar);
+    if (url === null) return res.status(400).json({ error: 'Avatar must be an http(s) URL' });
+    user.avatar = url;
+  }
+  if (b.socialLinks && typeof b.socialLinks === 'object') {
+    const links = { ...(user.socialLinks || {}) };
+    for (const k of SOCIAL_KEYS) {                               // whitelist keys = no prototype pollution
+      if (b.socialLinks[k] === undefined) continue;
+      const url = safeUrl(b.socialLinks[k]);
+      if (url === null) return res.status(400).json({ error: `Invalid ${k} link (must be http/https)` });
+      links[k] = url;
+    }
+    user.socialLinks = links;
+  }
   await db.write();
-
-  const { password, ...safeUser } = user;
-  res.json(safeUser);
+  res.json(own(user));
 });
 
-// Add at the end of the file
-// Get top creators (by number of presets)
 router.get('/top', async (req, res) => {
   const db = await getDB();
-  const users = db.data.users;
-  const presets = db.data.presets;
-  const top = users.map(u => {
-    const userPresets = presets.filter(p => p.authorId === u.id);
-    const totalDownloads = userPresets.reduce((sum, p) => sum + (p.downloads || 0), 0);
+  const approved = db.data.presets.filter(p => p.status === 'approved');
+  const top = db.data.users.map(u => {
+    const mine = approved.filter(p => p.authorId === u.id);
     return {
-      id: u.id,
-      name: u.name,
-      username: u.username || u.email.split('@')[0],
-      avatar: u.avatar,
-      presetCount: userPresets.length,
-      totalDownloads,
-      followers: u.followers?.length || 0,
+      id: u.id, name: u.name, username: u.username || '', avatar: u.avatar || '',
+      presetCount: mine.length,
+      totalDownloads: mine.reduce((s, p) => s + (p.downloads || 0), 0),
+      followers: u.followers?.length || 0
     };
-  }).sort((a, b) => b.presetCount - a.presetCount || b.totalDownloads - a.totalDownloads)
-    .slice(0, 5); // top 5
+  }).filter(u => u.presetCount > 0)
+    .sort((a, b) => b.presetCount - a.presetCount || b.totalDownloads - a.totalDownloads)
+    .slice(0, 5);
   res.json(top);
 });
 
-// Get public profile by user ID
-router.get('/:id', async (req, res) => {
-  const db = await getDB();
-  const user = db.data.users.find(u => u.id === req.params.id);
-  if (!user) return res.status(404).json({ error: 'User not found' });
-  const { password, ...safeUser } = user;
-  // Include stats
-  const presets = db.data.presets.filter(p => p.authorId === user.id);
-  const totalDownloads = presets.reduce((sum, p) => sum + (p.downloads || 0), 0);
-  res.json({
-    ...safeUser,
-    totalPresets: presets.length,
-    totalDownloads,
-    followers: user.followers?.length || 0,
-    following: user.following?.length || 0,
-  });
-});
-
-// Get presets by user
-router.get('/:id/presets', async (req, res) => {
-  const db = await getDB();
-  const presets = db.data.presets.filter(p => p.authorId === req.params.id);
-  res.json(presets);
-});
-
-// Follow / Unfollow (toggle)
-router.post('/:id/follow', auth, async (req, res) => {
-  const db = await getDB();
-  const targetUser = db.data.users.find(u => u.id === req.params.id);
-  if (!targetUser) return res.status(404).json({ error: 'User not found' });
-  if (targetUser.id === req.user.id) return res.status(400).json({ error: 'Cannot follow yourself' });
-
-  const currentUser = db.data.users.find(u => u.id === req.user.id);
-  if (!currentUser) return res.status(404).json({ error: 'User not found' });
-
-  if (!targetUser.followers) targetUser.followers = [];
-  if (!currentUser.following) currentUser.following = [];
-
-  const isFollowing = targetUser.followers.includes(currentUser.id);
-  if (isFollowing) {
-    // Unfollow
-    targetUser.followers = targetUser.followers.filter(id => id !== currentUser.id);
-    currentUser.following = currentUser.following.filter(id => id !== targetUser.id);
-  } else {
-    targetUser.followers.push(currentUser.id);
-    currentUser.following.push(targetUser.id);
-  }
-
-  await db.write();
-  res.json({ 
-    following: !isFollowing,
-    followersCount: targetUser.followers.length,
-    followingCount: currentUser.following.length,
-  });
-});
-
-// Get download history (unchanged)
+// Own download history (before '/:id' routes)
 router.get('/me/downloads', auth, async (req, res) => {
   const db = await getDB();
-  const downloads = db.data.downloads.filter(d => d.userId === req.user.id);
-  const presetIds = downloads.map(d => d.presetId);
-  const presets = db.data.presets.filter(p => presetIds.includes(p.id));
-  res.json(presets);
+  const ids = new Set((db.data.downloads || []).filter(d => d.userId === req.user.id).map(d => d.presetId));
+  res.json(db.data.presets.filter(p => ids.has(p.id)).map(publicPreset));
 });
 
-// Toggle wishlist (unchanged)
 router.post('/me/wishlist/:presetId', auth, async (req, res) => {
   const db = await getDB();
   const user = db.data.users.find(u => u.id === req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
-  if (!user.wishlist) user.wishlist = [];
-  const idx = user.wishlist.indexOf(req.params.presetId);
-  if (idx === -1) user.wishlist.push(req.params.presetId);
-  else user.wishlist.splice(idx, 1);
+  if (!db.data.presets.some(p => p.id === req.params.presetId)) {
+    return res.status(404).json({ error: 'Preset not found' });
+  }
+  user.wishlist = user.wishlist || [];
+  const i = user.wishlist.indexOf(req.params.presetId);
+  if (i === -1) user.wishlist.push(req.params.presetId); else user.wishlist.splice(i, 1);
   await db.write();
   res.json({ wishlist: user.wishlist });
+});
+
+router.get('/:id', async (req, res) => {
+  const db = await getDB();
+  const user = db.data.users.find(u => u.id === req.params.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  const mine = db.data.presets.filter(p => p.authorId === user.id && p.status === 'approved');
+  res.json({
+    ...publicUser(user),
+    totalPresets: mine.length,
+    totalDownloads: mine.reduce((s, p) => s + (p.downloads || 0), 0),
+    followers: user.followers?.length || 0,
+    following: user.following?.length || 0
+  });
+});
+
+router.get('/:id/presets', async (req, res) => {
+  const db = await getDB();
+  res.json(db.data.presets.filter(p => p.authorId === req.params.id && p.status === 'approved').map(publicPreset));
+});
+
+router.post('/:id/follow', auth, async (req, res) => {
+  const db = await getDB();
+  const target = db.data.users.find(u => u.id === req.params.id);
+  const me = db.data.users.find(u => u.id === req.user.id);
+  if (!target || !me) return res.status(404).json({ error: 'User not found' });
+  if (target.id === me.id) return res.status(400).json({ error: 'Cannot follow yourself' });
+
+  target.followers = target.followers || [];
+  me.following = me.following || [];
+  const was = target.followers.includes(me.id);
+  if (was) {
+    target.followers = target.followers.filter(id => id !== me.id);
+    me.following = me.following.filter(id => id !== target.id);
+  } else {
+    target.followers.push(me.id);
+    me.following.push(target.id);
+  }
+  await db.write();
+  res.json({ following: !was, followersCount: target.followers.length, followingCount: me.following.length });
 });
 
 module.exports = router;
