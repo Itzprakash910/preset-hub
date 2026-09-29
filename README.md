@@ -1,32 +1,31 @@
 # PresetHub – Lightroom Preset Marketplace
 
-A full‑stack web application where users can browse, download, upload, and review Lightroom presets. Built with Node.js, Express, LowDB, and vanilla JavaScript.
+Node.js + Express + JSON file DB, vanilla JS frontend, PWA.
 
-## Features
-- User authentication (signup/login with JWT)
-- Preset CRUD with file upload (`.xmp`, `.dng`, `.lrtemplate`)
-- Advanced search, filtering, sorting
-- Reviews & ratings
-- Wishlist (favorites)
-- Creator dashboard
-- Admin panel
-- PWA support (offline, installable)
+## Setup
+```bash
+cd backend
+npm install
+cp .env.example .env
+# put a strong secret in .env:
+node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
+# add ADMIN_EMAIL / ADMIN_PASSWORD (12+ chars) to .env, then:
+npm run create-admin      # afterwards delete ADMIN_PASSWORD from .env
+npm run dev               # http://localhost:4000
+```
 
-## Tech Stack
-- Backend: Node.js + Express + LowDB
-- Frontend: Vanilla JS + CSS + HTML
-- PWA: Service Worker + Manifest
+## Security model
+- Preset files are stored in `backend/private_uploads/` and only delivered by `POST /api/presets/:id/download` (login + purchase check).
+- Only `uploads/previews/` (images) is public.
+- New uploads are `pending` until an admin approves them.
+- Helmet CSP, strict CORS allow-list, rate limits (login/signup/payments), 50kb body limit.
+- Prices are always read from the server DB; Razorpay signature checked with timing-safe compare.
 
-## Installation
-1. Clone the repo.
-2. `cd backend && npm install`
-3. Create `uploads/` folder in backend.
-4. `npm run dev`
-5. Open `http://localhost:4000`
-
-## Environment Variables (optional)
-- `PORT=4000`
-- `JWT_SECRET=your_secret`
+## Production checklist
+1. `NODE_ENV=production`, serve over HTTPS, `TRUST_PROXY=1` behind a proxy.
+2. Rotate any key that was ever committed/shared (JWT secret, Razorpay).
+3. Back up `backend/db/db.json` (or move to a real DB like Postgres/Mongo before real traffic).
+4. Run `npm audit`.
 
 ## License
 MIT
