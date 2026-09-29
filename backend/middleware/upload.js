@@ -5,10 +5,7 @@ const crypto = require('crypto');
 
 // Preset files are PRIVATE (served only via authenticated download route).
 // Preview images are public.
-const PRIVATE_DIR = path.join(__dirname, '..', 'private_uploads');
-const PREVIEW_DIR = path.join(__dirname, '..', 'uploads', 'previews');
-fs.mkdirSync(PRIVATE_DIR, { recursive: true });
-fs.mkdirSync(PREVIEW_DIR, { recursive: true });
+const { PRIVATE_DIR, PREVIEW_DIR } = require('../utils/paths');
 
 const IMG_EXT = ['.jpg', '.jpeg', '.png', '.webp'];   // gif/svg removed (svg = XSS risk)
 const IMG_MIME = ['image/jpeg', 'image/png', 'image/webp'];
@@ -39,6 +36,11 @@ module.exports = multer({
   storage,
   fileFilter,
   limits: { fileSize: 10 * 1024 * 1024, files: 2, fields: 10 }
+}).fields([{ name: 'file', maxCount: 1 }, { name: 'previewImage', maxCount: 1 }]);
+
+module.exports.PRIVATE_DIR = PRIVATE_DIR;
+module.exports.PREVIEW_DIR = PREVIEW_DIR;
+}
 }).fields([{ name: 'file', maxCount: 1 }, { name: 'previewImage', maxCount: 1 }]);
 
 module.exports.PRIVATE_DIR = PRIVATE_DIR;
