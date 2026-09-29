@@ -1,46 +1,44 @@
-const CACHE_NAME = 'presethub-v1';
-const urlsToCache = [
-  '/',
-  '/index.html',
-  '/style.css',
-  '/app.js',
-  '/manifest.json',
-  '/assets/icons/icon-72.png',
-  '/assets/icons/icon-96.png',
-  '/assets/icons/icon-128.png',
-  '/assets/icons/icon-144.png',
-  '/assets/icons/icon-152.png',
-  '/assets/icons/icon-192.png',
-  '/assets/icons/icon-256.png',
-  '/assets/icons/icon-384.png',
-  '/assets/icons/icon-512.png',
-  'https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css'
-];
+const VERSION = 'v2';
+const STATIC_CACHE = `presethub-static-${VERSION}`;
+const PRECACHE = ['/', '/style.css', '/app.js', '/manifest.json', '/assets/icons/icon-192.png', '/assets/icons/icon-512.png'];
 
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(urlsToCache))
+    caches.open(STATIC_CACHE)
+      // allSettled: one missing file must NOT break the whole install (old code used addAll)
+      .then(cache => Promise.allSettled(PRECACHE.map(u => cache.add(u))))
       .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(keys => {
-      return Promise.all(
-        keys.filter(key => key !== CACHE_NAME)
-            .map(key => caches.delete(key))
-      );
-    })
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== STATIC_CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', event => {
+  const req = event.request;
+  const url = new URL(req.url);
+
+  // Never touch: non-GET, other origins, API calls, downloads/uploads, admin (fresh + private data)
+  if (req.method !== 'GET' || url.origin !== location.origin) return;
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/uploads/') || url.pathname.startsWith('/admin')) return;
+
+  // Pages: network first, fall back to cached shell when offline
+  if (req.mode === 'navigate') {
+    event.respondWith(fetch(req).catch(() => caches.match('/')));
+    return;
+  }
+
+  // Static assets: stale-while-revalidate
   event.respondWith(
-    caches.match(event.request)
-      .then(response => response || fetch(event.request))
+    caches.open(STATIC_CACHE).then(async cache => {
+      const cached = await cache.match(req);
+      const network = fetch(req).then(res => { if (res.ok) cache.put(req, res.clone()); return res; }).catch(() => cached);
+      return cached || network;
+    })
   );
 });
