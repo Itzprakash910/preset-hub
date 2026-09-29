@@ -12,7 +12,8 @@ git push -u origin main
 
 ## 2. Railway project
 1. railway.com → **New Project → Deploy from GitHub repo** → अपना repo चुनें।
-2. Railway `railway.json` पढ़कर खुद build करेगा (root पर `npm install` → backend की dependencies अपने आप install)।
+2. Railway (Railpack builder) root पर `npm install` चलाएगा → `postinstall` backend की dependencies install करेगा। Build Command **खाली** छोड़ें।
+3. Service → Settings में: Start Command `node backend/server.js`, Healthcheck Path `/health`, Restart On Failure (10 retries), Serverless **OFF**।
 
 ## 3. Volume (ज़रूरी – वरना restart पर सारा data मिट जाएगा)
 Service → **Volumes → New Volume → Mount path: `/data`**
