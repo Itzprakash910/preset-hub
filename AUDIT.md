@@ -9,7 +9,7 @@
 | 4 | Admin panel: names/emails inserted with `innerHTML` → stored XSS steals admin token | All output escaped, inline `onclick` removed, CSP added |
 | 5 | Fallback JWT secret `'supersecretkey'` | Server refuses to start without a 32+ char secret |
 | 6 | Admin password hash in `db.json` is 59 chars (invalid) → admin can never log in | `npm run create-admin` script |
-| 7 | `index.html`, `app.js`, icons, `Glow.dng` are **empty (1 byte)** | Not fixable without source – frontend must be rebuilt/re-uploaded |
+| 7 | `index.html`, `app.js`, icons were **empty (1 byte)** | Rebuilt: new `index.html` + `app.js` (CSP-safe, no inline scripts), icons regenerated |
 
 ## HIGH
 - Role was trusted from the JWT for 7 days → now re-read from DB on every request.
@@ -51,3 +51,7 @@
 - JSON file DB is fine for a demo, not for real traffic/concurrent servers. Use Postgres/MongoDB later.
 - Email verification / password reset not implemented.
 - Font Awesome CDN has no SRI hash; self-host it for full control.
+
+## v1.2 additions
+- Profile edit, public creator page + Follow, Wishlist, My Downloads, My Presets (with delete).
+- Railway: root `package.json` + `railway.json`, `/health`, `DATA_DIR` (Volume), auto admin bootstrap, trust-proxy, `0.0.0.0` bind.
