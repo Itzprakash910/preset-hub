@@ -1,47 +1,45 @@
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
-const uploadDir = 'uploads/';
-const previewDir = 'uploads/previews/';
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-if (!fs.existsSync(previewDir)) fs.mkdirSync(previewDir, { recursive: true });
+// Preset files are PRIVATE (served only via authenticated download route).
+// Preview images are public.
+const PRIVATE_DIR = path.join(__dirname, '..', 'private_uploads');
+const PREVIEW_DIR = path.join(__dirname, '..', 'uploads', 'previews');
+fs.mkdirSync(PRIVATE_DIR, { recursive: true });
+fs.mkdirSync(PREVIEW_DIR, { recursive: true });
+
+const IMG_EXT = ['.jpg', '.jpeg', '.png', '.webp'];   // gif/svg removed (svg = XSS risk)
+const IMG_MIME = ['image/jpeg', 'image/png', 'image/webp'];
+const PRESET_EXT = ['.xmp', '.dng', '.lrtemplate'];
 
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    if (file.fieldname === 'previewImage') {
-      cb(null, previewDir);
-    } else {
-      cb(null, uploadDir);
-    }
-  },
-  filename: function (req, file, cb) {
-    const unique = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, unique + path.extname(file.originalname));
+  destination: (req, file, cb) => cb(null, file.fieldname === 'previewImage' ? PREVIEW_DIR : PRIVATE_DIR),
+  filename: (req, file, cb) => {
+    // random name, extension whitelisted below – user filename is never used on disk
+    cb(null, crypto.randomBytes(16).toString('hex') + path.extname(file.originalname).toLowerCase());
   }
 });
 
 const fileFilter = (req, file, cb) => {
+  const ext = path.extname(file.originalname).toLowerCase();
   if (file.fieldname === 'previewImage') {
-    const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (allowed.includes(ext)) cb(null, true);
-    else cb(new Error('Only images are allowed for preview'), false);
-  } else {
-    const allowed = ['.xmp', '.dng', '.lrtemplate'];
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (allowed.includes(ext)) cb(null, true);
-    else cb(new Error('Only .xmp, .dng, .lrtemplate files are allowed'), false);
+    if (IMG_EXT.includes(ext) && IMG_MIME.includes(file.mimetype)) return cb(null, true);
+    return cb(new Error('Preview must be JPG, PNG or WEBP'));
   }
+  if (file.fieldname === 'file') {
+    if (PRESET_EXT.includes(ext)) return cb(null, true);
+    return cb(new Error('Only .xmp, .dng, .lrtemplate files are allowed'));
+  }
+  cb(new Error('Unexpected field'));
 };
 
-const uploadFields = multer({
-  storage: storage,
-  fileFilter: fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 }
-}).fields([
-  { name: 'file', maxCount: 1 },
-  { name: 'previewImage', maxCount: 1 }
-]);
+module.exports = multer({
+  storage,
+  fileFilter,
+  limits: { fileSize: 10 * 1024 * 1024, files: 2, fields: 10 }
+}).fields([{ name: 'file', maxCount: 1 }, { name: 'previewImage', maxCount: 1 }]);
 
-module.exports = uploadFields;
+module.exports.PRIVATE_DIR = PRIVATE_DIR;
+module.exports.PREVIEW_DIR = PREVIEW_DIR;
