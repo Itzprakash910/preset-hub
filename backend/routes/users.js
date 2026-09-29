@@ -80,6 +80,19 @@ router.get('/top', async (req, res) => {
   res.json(top);
 });
 
+router.get('/me/wishlist', auth, async (req, res) => {
+  const db = await getDB();
+  const user = db.data.users.find(u => u.id === req.user.id);
+  const ids = new Set(user?.wishlist || []);
+  res.json(db.data.presets.filter(p => ids.has(p.id) && p.status === 'approved').map(publicPreset));
+});
+
+// All my presets incl. pending/rejected
+router.get('/me/presets', auth, async (req, res) => {
+  const db = await getDB();
+  res.json(db.data.presets.filter(p => p.authorId === req.user.id).map(publicPreset));
+});
+
 // Own download history (before '/:id' routes)
 router.get('/me/downloads', auth, async (req, res) => {
   const db = await getDB();
