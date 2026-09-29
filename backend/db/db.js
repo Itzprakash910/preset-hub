@@ -1,7 +1,5 @@
 const fs = require('fs');
-const path = require('path');
-
-const DB_PATH = path.join(__dirname, 'db.json');
+const { DB_PATH } = require('../utils/paths');
 const DEFAULTS = () => ({ users: [], presets: [], downloads: [], orders: [] });
 
 let dbData = null;
@@ -36,6 +34,10 @@ function saveData() {
 async function getDB() {
   if (!dbData) loadData();
   return { data: dbData, write: saveData };
+}
+
+module.exports = { getDB };
+;
 }
 
 module.exports = { getDB };
