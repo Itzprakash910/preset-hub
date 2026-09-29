@@ -2,34 +2,40 @@ const fs = require('fs');
 const path = require('path');
 
 const DB_PATH = path.join(__dirname, 'db.json');
+const DEFAULTS = () => ({ users: [], presets: [], downloads: [], orders: [] });
 
-// In‑memory data
 let dbData = null;
+let writing = Promise.resolve();
 
-// Load or initialise DB
 function loadData() {
   if (!fs.existsSync(DB_PATH)) {
-    dbData = { users: [], presets: [], downloads: [], orders: [] };
+    dbData = DEFAULTS();
     fs.writeFileSync(DB_PATH, JSON.stringify(dbData, null, 2));
-  } else {
-    const content = fs.readFileSync(DB_PATH, 'utf8');
-    dbData = JSON.parse(content);
+    return;
+  }
+  try {
+    dbData = { ...DEFAULTS(), ...JSON.parse(fs.readFileSync(DB_PATH, 'utf8')) };
+  } catch (err) {
+    // Corrupt file: keep a backup instead of silently wiping data
+    fs.copyFileSync(DB_PATH, `${DB_PATH}.corrupt-${Date.now()}`);
+    console.error('db.json corrupt, backup saved. Starting empty.', err.message);
+    dbData = DEFAULTS();
   }
 }
 
-// Save DB
+// Atomic + serialized write: temp file -> rename, one at a time
 function saveData() {
-  fs.writeFileSync(DB_PATH, JSON.stringify(dbData, null, 2));
+  writing = writing.then(() => {
+    const tmp = `${DB_PATH}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(dbData, null, 2));
+    fs.renameSync(tmp, DB_PATH);
+  }).catch(err => console.error('DB write failed:', err));
+  return writing;
 }
 
-// Async getDB (matching the old interface)
 async function getDB() {
   if (!dbData) loadData();
-  return {
-    data: dbData,
-    write: async () => { saveData(); },
-    read: () => { loadData(); }   // optional, for consistency
-  };
+  return { data: dbData, write: saveData };
 }
 
 module.exports = { getDB };
